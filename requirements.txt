@@ -1,0 +1,9 @@
+cloudinary==1.44.1
+flask==3.0.3
+mysql_connector_python==8.0.33
+phonenumbers==9.0.21
+phonenumberslite==9.0.21
+python-dotenv==1.0.1
+requests==2.32.2
+Werkzeug==3.0.3
+gunicorn==22.0.0
