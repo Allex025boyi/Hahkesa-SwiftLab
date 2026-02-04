@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ subject.title() }} Books - Hakhesa Academy</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            padding: 25px 35px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .header-title h1 {
+            font-size: 22px;
+            color: #1f2937;
+            margin-bottom: 3px;
+        }
+
+        .header-title p {
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .logout-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+
+        .logout-btn:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        .flash {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            animation: slideIn 0.5s ease;
+        }
+       
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+       
+        .flash.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+       
+        .flash.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+       
+        .flash.warning {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+        }
+
+        /* Content Section */
+        .content-section {
+            background: white;
+            padding: 35px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        .book-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .book-list-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .back-btn {
+            background: #f3f4f6;
+            color: #374151;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+
+        .back-btn:hover {
+            background: #e5e7eb;
+            transform: translateX(-3px);
+        }
+
+        /* Book Item */
+        .book-item {
+            display: flex;
+            gap: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 2px solid #f3f4f6;
+            transition: all 0.3s;
+        }
+
+        .book-item:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15);
+        }
+
+        .book-cover {
+            width: 100px;
+            height: 140px;
+            border-radius: 8px;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 48px;
+        }
+
+        .book-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        .book-details {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .book-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #3b82f6;
+            cursor: pointer;
+            line-height: 1.4;
+            text-decoration: none;
+        }
+
+        .book-title:hover {
+            text-decoration: underline;
+        }
+
+        .book-author {
+            font-size: 13px;
+            color: #6b7280;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .book-description {
+            font-size: 14px;
+            color: #4b5563;
+            line-height: 1.6;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .book-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #6b7280;
+            flex-wrap: wrap;
+        }
+
+        .book-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .book-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 5px;
+        }
+
+        .action-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+
+        .action-btn.listen {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .action-btn.read {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .action-btn.download {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .action-btn.share {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .action-btn.save {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .no-books {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6b7280;
+            font-size: 16px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                padding: 20px;
+            }
+
+            .header-title h1 {
+                font-size: 18px;
+            }
+
+            .content-section {
+                padding: 20px 15px;
+            }
+
+            .book-item {
+                flex-direction: column;
+                padding: 15px;
+            }
+
+            .book-cover {
+                width: 100%;
+                height: 200px;
+            }
+
+            .book-actions {
+                flex-direction: column;
+            }
+
+            .action-btn {
+                width: 100%;
+            }
+
+            .book-list-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .book-list-title {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">📚</div>
+                <div class="header-title">
+                    <h1>Hakhesa Academy Online Library Management System</h1>
+                    <p>{{ level.title() }} Level - {{ subject.title() }} {{ 'Papers' if is_papers else 'Books' }}</p>
+                </div>
+            </div>
+            <a href="#{#{{ url_for('logout') }}#}" class="logout-btn">LOG ME OUT</a>
+        </div>
+              <!-- Flash Messages -->
+              {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                  {% for category, message in messages %}
+                      <div class="flash {{ category }}">
+                          {{ message }}
+                      </div>
+                  {% endfor %}
+              {% endif %}
+          {% endwith %}
+
+        <!-- Book List Content -->
+        <div class="content-section">
+            <div class="book-list-header">
+                <h3 class="book-list-title">{{ subject.title() }} - {{ 'Past Exam Papers' if is_papers else 'Books' }}</h3>
+                <a href="{{ url_for('library_bp.library_dashboard') }}" class="back-btn">← Back to Dashboard</a>
+            </div>
+
+            {% if books %}
+                {% for book in books %}
+                <div class="book-item">
+                    <div class="book-cover">
+                        {% if book.COVER_IMAGE %}
+                            <img src="#{#{{ url_for('static', filename='uploads/covers/' + book.COVER_IMAGE) }}#}" alt="{{ book.TITLE }}">
+                        {% else %}
+                            📚
+                        {% endif %}
+                    </div>
+                    <div class="book-details">
+                        <a href="{{ url_for('library_bp.view_books',level=level, subject=subject) }}" class="book-title">
+                            {{ book.TITLE }}
+                        </a>
+                        <div class="book-author">👤 {{ book.AUTHOR or 'Unknown Author' }}</div>
+                        <div class="book-description">
+                            {{ book.DESCRIPTION or 'No description available for this book.' }}
+                        </div>
+                        <div class="book-meta">
+                            <span>{{ book.FORMAT or 'PDF' }}</span> · 
+                            <span>{{ book.LANGUAGE or 'English' }}</span> · 
+                            <span>{{ book.BOOK_YEAR or '2024' }} {{book.EXAMINATION_SEASON or ''}}</span> · 
+                            <span>{{ book.FILE_SIZE  or 'N/A' }} MB</span>
+                        </div>
+                        <div class="book-actions">
+                            {% if book.AUDIO_FILE %}
+                            <a href="#{#{{ url_for('listen_book', book_id=book.BOOK_ID) }}#}" class="action-btn listen">🎧 Listen</a>
+                            {% endif %}
+                            <a href="{{ url_for('library_bp.view_pdf', book_id=book.BOOK_ID) }}" class="action-btn read">📖 Read</a>
+                            <a href="{{ url_for('library_bp.download_pdf', book_id=book.BOOK_ID) }}" class="action-btn download">⬇️ Download</a>
+                            <a href="{{url_for('library_bp.share',subject=subject,level=level)}}"target="_blank"rel="noopener noreferrer">
+                            <button  class="action-btn share">🔗 Share</button>
+                            </a>
+                            <a href ="{{url_for('library_bp.delete_books_and_papers',book_id=book.BOOK_ID)}}"class="btn btn-danger" onclick="return confirm ('Are you sure you want to delete {{ book.TITLE }}? This can not be undone.')">
+                            <button  class="action-btn delete">❌ Delete</button>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-books">
+                    <p>📚 No {{ 'papers' if is_papers else 'books' }} available in this category yet.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+       
+        // Auto-dismiss flash messages after 3 seconds
+        setTimeout(function() {
+            const flashes = document.querySelectorAll('.flash');
+            flashes.forEach(flash => {
+                flash.style.transition = 'opacity 0.3s';
+                flash.style.opacity = '0';
+                setTimeout(() => flash.remove(), 300);
+            });
+        }, 3000);
+
+       
+    </script>
+</body>
+</html>
