@@ -46,7 +46,7 @@ db_config={
 }
 
 #This pooling makes connections so user dont wait 5 minutes 
-db_pool=mysql.connector.pooling.MySQLConnectionPool(pool_name="mypool",pool_size=20,**db_config)
+db_pool=mysql.connector.pooling.MySQLConnectionPool(pool_name="mypool",pool_size=5,**db_config)
 #Establishing the database connection. Connection helper function
 def Get_DbConnection ():
     return db_pool.get_connection()
@@ -234,3 +234,4 @@ def clean_filename(name: str):
            
 
         
+
