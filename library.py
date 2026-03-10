@@ -1,6 +1,6 @@
 import os
 import sys
-from flask import (Flask, session, flash, Response, render_template, redirect, url_for,
+from flask import (Flask, session, flash, Response, render_template, redirect, url_for, jsonify,
                    request, Blueprint, send_from_directory, send_file)
 from helper_functions import Get_DbConnection, normalized_subject, SUBJECT_IMOJIS, clean_filename
 from dotenv import load_dotenv
@@ -14,6 +14,7 @@ from cloudinary import exceptions
 import cloudinary.uploader
 from cloudinary.utils import cloudinary_url
 from mysql.connector.abstracts import MySQLConnectionAbstract, MySQLCursorAbstract
+from datetime import date
 
 load_dotenv()
 library_bp = Blueprint('library_bp', __name__)
@@ -254,7 +255,7 @@ def increment_paper_views(book_id):
             except:
                 pass
 
-# ------------increment book download counthelper functions-----------
+# ------------increment book download count helper functions-----------
 def increment_book_downloads(book_id):
     connection = None
     cursor = None
@@ -435,7 +436,7 @@ def delete_paper_by_book_id(book_id):
             return False
             
         cursor = connection.cursor()
-        cursor.execute("DELETE FROM books WHERE BOOK_ID =%s AND IS_PAPER=1", (book_id,))
+        cursor.execute("DELETE FROM books WHERE BOOK_ID=%s AND IS_PAPER=1", (book_id,))
         connection.commit()
         return True
     except Exception as err:
@@ -459,21 +460,185 @@ def delete_paper_by_book_id(book_id):
                 pass
 
 
+# FIX 1: Added credits and last_reset to SELECT, fixed placeholder syntax, fixed table name
+@library_bp.route("/user/<jid>", methods=["GET"])
+def get_user(jid):
+    connection = None
+    cursor = None
+    try:
+        connection = Get_DbConnection()
+        cursor = connection.cursor(dictionary=True)
+        # FIX: Was only selecting 'username' — added credits and last_reset
+        cursor.execute('SELECT username, credits, last_reset FROM whatsapp_user WHERE jid=%s', (jid,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"exists": False}), 404
+        # Reset user credits daily
+        today = date.today()
+        if user['last_reset'] != today:
+            # FIX: Was 'whatsapp_users' (wrong table) and used bare % instead of %s
+            cursor.execute(
+                "UPDATE whatsapp_user SET credits=5, last_reset=%s WHERE jid=%s",
+                (today, jid)
+            )
+            connection.commit()
+            user['credits'] = 5
+        return jsonify({**user, "exists": True})
+    except Exception as e:
+        print(f"Error Occured: {e}")
+        # FIX: Was missing a return on exception — Flask would crash with no response
+        return jsonify({"error": "Internal server error"}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except:
+                pass
+        if connection and connection.is_connected():
+            try:
+                connection.close()
+            except:
+                pass
+
+
+@library_bp.route("/user/register", methods=['POST'])
+def register_user():
+    data = request.json
+    jid = data.get('jid')
+    # FIX: Added input validation — missing jid would cause a crash
+    if not jid:
+        return jsonify({"error": "jid is required"}), 400
+    connection = None
+    cursor = None
+    try:
+        connection = Get_DbConnection()
+        cursor = connection.cursor(dictionary=True)
+        sql = """INSERT INTO whatsapp_user(jid, username, datejoined, last_reset, credits,
+        download_count) VALUES(%s,%s,now(),%s,5,0)"""
+        values = (jid, data.get('username', ''), date.today())
+        cursor.execute(sql, values)
+        connection.commit()
+        return jsonify({"message": "registered"}), 201
+    except Exception as e:
+        print(f"Error occured: {e}")
+        # FIX: Was missing a return on exception
+        return jsonify({"error": "Internal server error"}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except:
+                pass
+        if connection and connection.is_connected():
+            try:
+                connection.close()
+            except:
+                pass
+
+
+@library_bp.route("/user/download", methods=["POST"])
+def user_increment_download():
+    connection = None
+    cursor = None
+    jid = request.json.get('jid')
+    # FIX: Added input validation
+    if not jid:
+        return jsonify({"error": "jid is required"}), 400
+    try:
+        connection = Get_DbConnection()
+        # FIX: Was 'dictinary=True' (typo) — caused a TypeError
+        cursor = connection.cursor(dictionary=True)
+        # FIX: Was bare % instead of %s
+        cursor.execute(
+            "UPDATE whatsapp_user SET download_count=COALESCE(download_count,0)+1 WHERE jid=%s",
+            (jid,)
+        )
+        connection.commit()
+        return jsonify({"message": "ok"})
+    except Exception as e:
+        print(f"Error Occured: {e}")
+        # FIX: Was missing a return on exception
+        return jsonify({"error": "Internal server error"}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except:
+                pass
+        # FIX: Was 'connection.is_connected' without () — never actually called the method
+        if connection and connection.is_connected():
+            try:
+                connection.close()
+            except:
+                pass
+
+
+@library_bp.route("/user/use-credit", methods=['POST'])
+def use_credit():
+    jid = request.json.get('jid')
+    # FIX: Added input validation
+    if not jid:
+        return jsonify({"error": "jid is required"}), 400
+    connection = None
+    cursor = None
+    try:
+        connection = Get_DbConnection()
+        cursor = connection.cursor(dictionary=True)
+        # FIX: Was bare % instead of %s, and had a trailing space in the query
+        cursor.execute("SELECT credits, last_reset FROM whatsapp_user WHERE jid=%s", (jid,))
+        user = cursor.fetchone()
+        if not user:
+            print("User not Found")
+            return jsonify({"error": "user not found"}), 404
+        today = date.today()
+        if user['last_reset'] != today:
+            # FIX: Was 'UPDATE whstsapp SET last_reset=5' — wrong table name and set wrong value
+            cursor.execute(
+                "UPDATE whatsapp_user SET credits=5, last_reset=%s WHERE jid=%s",
+                (today, jid)
+            )
+            connection.commit()
+            user['credits'] = 5
+        if user['credits'] <= 0:
+            # FIX: Was returning success=True when credits are 0 — now correctly returns an error
+            return jsonify({"success": False, "credits": 0, "error": "No credits remaining"}), 403
+        # FIX: Was bare % instead of %s
+        cursor.execute("UPDATE whatsapp_user SET credits=credits-1 WHERE jid=%s", (jid,))
+        connection.commit()
+        return jsonify({"success": True, "credits": user["credits"] - 1})
+    except Exception as e:
+        print(f"Error Occured: {e}")
+        # FIX: Was missing a return on exception
+        return jsonify({"error": "Internal server error"}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except:
+                pass
+        if connection and connection.is_connected():
+            try:
+                connection.close()
+            except:
+                pass
+
+
 @library_bp.route("/")
 def library_dashboard():
     book_counts = get_book_count()
     paper_counts = get_paper_count()
     totaluploads = dashboardhelperfunction()
-    return render_template('library.html', totaluploads=totaluploads, SUBJECT_IMOJIS=SUBJECT_IMOJIS, book_counts=book_counts, paper_counts=paper_counts)
+    return render_template('library.html', totaluploads=totaluploads, SUBJECT_IMOJIS=SUBJECT_IMOJIS,
+                           book_counts=book_counts, paper_counts=paper_counts)
 
 
-# route for uploading a new file
+# Route for uploading a new file
 @library_bp.route("/upload", methods=["GET", "POST"])
 def upload():
     if request.method == "POST":
         connection = None
         cursor = None
-        
+
         subject = request.form.get('subject')
         level = request.form.get('level')
         language = request.form.get('language')
@@ -484,7 +649,7 @@ def upload():
         secured_bookname = secure_filename(cleaned_name)
         year = None
         exam_season = None
-        
+
         if is_paper == 1:
             year = request.form.get('year')
             author = request.form.get('exambody')
@@ -492,10 +657,10 @@ def upload():
             description = f"This is a {subject} question paper for the {author} {level} level {exam_season} {year} session "
         else:
             author = request.form.get('author')
-            description = f"{secured_bookname} is an {level} {subject} book written by {author if author.strip() else 'Unkown Author'} "
-        
+            description = f"{secured_bookname} is an {level} {subject} book written by {author if author.strip() else 'Unknown Author'} "
+
         file_type = book_upload.filename.rsplit(".", 1)[1].upper() if "." in book_upload.filename else "PDF"
-        
+
         # Upload to Cloudinary
         try:
             upload_result = cloudinary.uploader.upload(
@@ -507,41 +672,41 @@ def upload():
                 unique_filename=True,
                 tags=[category, level, language]
             )
-            
+
             cloudinary_url = upload_result['secure_url']
             public_id = upload_result['public_id']
             book_size = round(upload_result['bytes'] / (1024 * 1024), 2)
             print(f"The uploaded book public id is {public_id}")
-           
+
         except cloudinary.exceptions.Error as cloud_err:
             print(f"Cloudinary error: {cloud_err}")
             flash(f"File upload error: {cloud_err}", "error")
             return redirect(url_for('library_bp.library_dashboard'))
-        
+
         # Database insert
         try:
             connection = Get_DbConnection()
             if not connection:
                 flash("Database connection failed. Please try again.", "error")
                 return redirect(url_for('library_bp.library_dashboard'))
-            
+
             cursor = connection.cursor()
-            sql = """INSERT INTO books (TITLE,AUTHOR,DESCRIPTION ,SUBJECT,CATEGORY,
+            sql = """INSERT INTO books (TITLE,AUTHOR,DESCRIPTION,SUBJECT,CATEGORY,
                 LEVEL,FORMAT,CLOUDINARY_PUBLIC_ID,LANGUAGE,FILENAME,FILE_PATH,FILE_SIZE,BOOK_YEAR,
                 UPLOAD_DATE,IS_PAPER,EXAMINATION_SEASON) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now(),%s,%s) """
-            
+
             values = (secured_bookname, author, description, normalized_subject(subject), category, level,
-                     file_type, public_id, language, secured_bookname, cloudinary_url, book_size, year, is_paper, exam_season)
-            
+                      file_type, public_id, language, secured_bookname, cloudinary_url, book_size, year, is_paper, exam_season)
+
             cursor.execute(sql, values)
             connection.commit()
-            
-            print(f"Book succesfully added {values}")
+
+            print(f"Book successfully added {values}")
             flash(f"{'Paper' if is_paper == 1 else 'Book'} {secured_bookname} uploaded successfully", "success")
             return redirect(url_for('library_bp.library_dashboard'))
-            
+
         except Exception as err:
-            print(f"error DATABASE {err}")
+            print(f"Database error: {err}")
             flash(f"Database error: {err}", "error")
             if connection and connection.is_connected():
                 try:
@@ -549,7 +714,7 @@ def upload():
                 except Exception as rollback_err:
                     print(f"Rollback Error: {rollback_err}")
             return redirect(url_for('library_bp.library_dashboard'))
-            
+
         finally:
             if cursor:
                 try:
@@ -562,8 +727,10 @@ def upload():
                 except:
                     pass
 
+    return render_template('upload.html')
 
-# viewing the pdf file
+
+# Viewing the pdf file
 @library_bp.route("/view_pdf/<int:book_id>", methods=["GET"])
 def view_pdf(book_id):
     connection = None
@@ -572,34 +739,34 @@ def view_pdf(book_id):
     subject = None
     is_paper = False
     cloudinary_url = None
-    
+
     try:
         connection = Get_DbConnection()
         if not connection:
             print("Failed to get database connection")
             flash("Database connection failed", "error")
             return redirect(url_for('library_bp.library_dashboard'))
-        
+
         cursor = connection.cursor(dictionary=True)
         cursor.execute("SELECT * FROM books WHERE BOOK_ID=%s", (book_id,))
         result = cursor.fetchone()
-        
+
         if not result:
             flash("File not found", "error")
             return redirect(url_for('library_bp.library_dashboard'))
-        
+
         level = result.get('LEVEL')
         subject = result.get('SUBJECT')
         is_paper = result.get('IS_PAPER') == 1
         cloudinary_url = result.get('FILE_PATH')
-        
+
         if not cloudinary_url:
             flash("File path not found", "error")
             if is_paper:
                 return redirect(url_for('library_bp.view_papers', level=level, subject=subject))
             else:
                 return redirect(url_for('library_bp.view_books', level=level, subject=subject))
-        
+
         # Increment views
         if is_paper:
             print(f"Opening cloudinary link: {cloudinary_url}")
@@ -613,9 +780,9 @@ def view_pdf(book_id):
                 print("Book view incremented by 1")
             else:
                 print("Book view increment failed")
-        
+
         return redirect(cloudinary_url)
-        
+
     except mysql.connector.Error as err:
         print(f"Error from Database: {err}")
         flash("Database error occurred", "error")
@@ -625,7 +792,7 @@ def view_pdf(book_id):
             return redirect(url_for('library_bp.view_books', level=level, subject=subject))
         else:
             return redirect(url_for('library_bp.library_dashboard'))
-            
+
     except Exception as e:
         print(f"Error: {e}")
         flash("An error occurred", "error")
@@ -635,7 +802,7 @@ def view_pdf(book_id):
             return redirect(url_for('library_bp.view_books', level=level, subject=subject))
         else:
             return redirect(url_for('library_bp.library_dashboard'))
-            
+
     finally:
         if cursor:
             try:
@@ -652,19 +819,29 @@ def view_pdf(book_id):
 # ----------------view books route -----------------------
 @library_bp.route("/books/<level>/<subject>")
 def view_books(level, subject):
-    category = request.args.get('catagory', 'none')
+    # FIX: Was 'catagory' (typo) in both view routes
+    category = request.args.get('category', 'none')
     print(f"THE USER {subject}")
     books = get_book_by_subject_and_level(level, subject)
-    return render_template("booklist.html", category=category, subject=subject, level=level, books=books, is_papers=False)
+    accept_header = request.headers.get("Accept", "")
+    if 'application/json' in accept_header:
+        return jsonify(books)
+    return render_template("booklist.html", category=category, subject=subject,
+                           level=level, books=books, is_papers=False)
 
 
 # ----------------view papers route -----------------------
 @library_bp.route("/papers/<level>/<subject>")
 def view_papers(level, subject):
-    category = request.args.get('catagory', 'none')
+    # FIX: Was 'catagory' (typo)
+    category = request.args.get('category', 'none')
     papers = get_papers_by_subject_and_level(level, subject)
     print(f"THE USER {subject}")
-    return render_template("booklist.html", category=category, subject=subject, level=level, books=papers, is_papers=True)
+    accept_header = request.headers.get("Accept", "")
+    if 'application/json' in accept_header:
+        return jsonify(papers)
+    return render_template("booklist.html", category=category, subject=subject,
+                           level=level, books=papers, is_papers=True)
 
 
 # ------------------route for download-----------
@@ -674,7 +851,7 @@ def download_pdf(book_id):
     level = None
     subject = None
     book = get_book_by_book_id(book_id)
-    
+
     if book is not None and book.get('FILE_PATH'):
         url = book['FILE_PATH']
         level = book.get('LEVEL')
@@ -690,12 +867,12 @@ def download_pdf(book_id):
                 response.raise_for_status()
                 increment_book_downloads(book_id)
                 return send_file(BytesIO(response.content), mimetype='application/pdf',
-                               as_attachment=True, download_name=custom_name)
+                                 as_attachment=True, download_name=custom_name)
             except Exception as e:
                 print(f"ERROR OCCURED: {e}")
                 flash(f"Download failed please try again later!", "error")
                 return redirect(url_for('library_bp.view_books', level=level, subject=subject))
-    
+
     # -----------downloading paper
     paper = get_paper_by_id(book_id)
     if paper is not None and paper.get('FILE_PATH'):
@@ -713,12 +890,12 @@ def download_pdf(book_id):
                 response.raise_for_status()
                 increment_paper_downloads(book_id)
                 return send_file(BytesIO(response.content), mimetype='application/pdf',
-                               as_attachment=True, download_name=custom_name)
+                                 as_attachment=True, download_name=custom_name)
             except Exception as e:
                 print(f"ERROR OCCURED: {e}")
                 flash(f"Download failed please try again later!", "error")
                 return redirect(url_for('library_bp.view_papers', level=level, subject=subject))
-    
+
     # If we get here, neither book nor paper was found
     flash("File not found", "error")
     return redirect(url_for('library_bp.library_dashboard'))
@@ -727,15 +904,15 @@ def download_pdf(book_id):
 # -------------------------share app route -----------------
 @library_bp.route("/book/share/<level>/<subject>")
 def share(level, subject):
-    if subject.lower() in SUBJECT_IMOJIS:
-        subject_imoji = SUBJECT_IMOJIS.get(subject.lower(), '📚')
+    # FIX: Was only assigning subject_imoji inside the if block — caused NameError if subject not found
+    subject_imoji = SUBJECT_IMOJIS.get(subject.lower(), '📚')
     link = url_for('library_bp.view_books', level=level, subject=subject, _external=True)
     raw_message = (f"{subject_imoji}*Check out these {subject.title()} books on our site!*{subject_imoji}\n\n "
-                  f"Subject: {subject.title()}\n"
-                  f"Level: {level.title()} Level\n\n"
-                  f"👇 Click the link below to view:\n"
-                  f"{link}"
-                  )
+                   f"Subject: {subject.title()}\n"
+                   f"Level: {level.title()} Level\n\n"
+                   f"👇 Click the link below to view:\n"
+                   f"{link}"
+                   )
     encoded_message = quote(raw_message)
     whatsapp_url = f"https://wa.me/?text={encoded_message}"
     print(f"THE BOOK LINK IS {link}")
@@ -749,31 +926,31 @@ def delete_books_and_papers(book_id):
     level = None
     subject = None
     is_paper = False
-    
+
     try:
         # Try to get as book first
         item = get_book_by_book_id(book_id)
-        
+
         if item is None:
             # If not a book, try as paper
             item = get_paper_by_id(book_id)
             is_paper = True
-        
+
         if item is None:
             flash("File not found", "error")
             return redirect(url_for('library_bp.library_dashboard'))
-        
+
         level = item.get('LEVEL')
         subject = item.get('SUBJECT')
         public_id = item.get('CLOUDINARY_PUBLIC_ID')
-        
+
         if not public_id:
             flash("File has no saved public ID", "error")
             print(f"File has no saved public id")
         else:
             try:
-                # Delete from Cloudinary
-                result = cloudinary.uploader.destroy(public_id, resource_type="image")
+                # FIX: Was resource_type="image" — PDFs are stored as resource_type="raw"
+                result = cloudinary.uploader.destroy(public_id, resource_type="raw")
                 if result.get('result') == "ok":
                     flash("File has been deleted successfully from Cloudinary", "success")
                     print(f"File deleted successfully from cloudinary: {public_id}")
@@ -783,26 +960,26 @@ def delete_books_and_papers(book_id):
             except Exception as e:
                 print(f"Cloudinary deletion error: {e}")
                 flash(f"Cloudinary error: {e}", "error")
-        
+
         # Delete from database
         if is_paper:
             DB_delete = delete_paper_by_book_id(book_id)
         else:
             DB_delete = delete_book_by_book_id(book_id)
-        
+
         if DB_delete:
             flash("File has been deleted successfully from the database", "success")
             print(f"Deletion from database successful")
         else:
             flash("File deletion from database failed", "error")
             print(f"Deletion from database failed")
-        
+
         # Redirect to appropriate page
         if is_paper:
             return redirect(url_for('library_bp.view_papers', level=level, subject=subject))
         else:
             return redirect(url_for('library_bp.view_books', level=level, subject=subject))
-            
+
     except Exception as err:
         print(f"Error occurred: {err}")
         flash(f"An error occurred: {err}", "error")
@@ -812,5 +989,3 @@ def delete_books_and_papers(book_id):
             else:
                 return redirect(url_for('library_bp.view_books', level=level, subject=subject))
         return redirect(url_for('library_bp.library_dashboard'))
-
-
